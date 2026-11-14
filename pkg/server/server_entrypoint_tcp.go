@@ -31,6 +31,7 @@ import (
 	"github.com/traefik/traefik/v3/pkg/observability/logs"
 	"github.com/traefik/traefik/v3/pkg/observability/metrics"
 	"github.com/traefik/traefik/v3/pkg/proxy/fast"
+	"github.com/traefik/traefik/v3/pkg/proxy/wtproxy"
 	"github.com/traefik/traefik/v3/pkg/safe"
 	tcprouter "github.com/traefik/traefik/v3/pkg/server/router/tcp"
 	"github.com/traefik/traefik/v3/pkg/server/service/kerberos"
@@ -895,9 +896,12 @@ func denyFragment(h http.Handler) http.Handler {
 
 // denyConnect rejects the CONNECT requests, whatever the HTTP version.
 // CONNECT tunnels are not supported, and forwarding them without a dedicated handling is unsafe.
+// The only exception is the WebTransport sessions accepted by the HTTP/3 server of an entry point.
 func denyConnect(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodConnect {
+		// The WebTransport sessions are the only CONNECT requests handled, and only when the HTTP/3 server of the
+		// entry point is serving them: the context value cannot be set by a client.
+		if req.Method == http.MethodConnect && !wtproxy.IsServedWebTransportRequest(req) {
 			log.Debug().Msg("Rejecting CONNECT request: CONNECT tunnels are not supported")
 			rw.WriteHeader(http.StatusNotImplemented)
 

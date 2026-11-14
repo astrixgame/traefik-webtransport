@@ -155,7 +155,23 @@ func (c *HTTP2Config) SetDefaults() {
 
 // HTTP3Config is the HTTP3 configuration of an entry point.
 type HTTP3Config struct {
-	AdvertisedPort int `description:"UDP port to advertise, on which HTTP/3 is available." json:"advertisedPort,omitempty" toml:"advertisedPort,omitempty" yaml:"advertisedPort,omitempty" export:"true"`
+	AdvertisedPort int                 `description:"UDP port to advertise, on which HTTP/3 is available." json:"advertisedPort,omitempty" toml:"advertisedPort,omitempty" yaml:"advertisedPort,omitempty" export:"true"`
+	WebTransport   *WebTransportConfig `description:"WebTransport configuration." json:"webTransport,omitempty" toml:"webTransport,omitempty" yaml:"webTransport,omitempty" label:"allowEmpty" file:"allowEmpty" export:"true"`
+}
+
+// WebTransportConfig is the WebTransport configuration of an entry point.
+type WebTransportConfig struct {
+	MaxIncomingStreams    int64    `description:"Maximum number of concurrent bidirectional streams that a peer can open in a WebTransport session." json:"maxIncomingStreams,omitempty" toml:"maxIncomingStreams,omitempty" yaml:"maxIncomingStreams,omitempty" export:"true"`
+	MaxIncomingUniStreams int64    `description:"Maximum number of concurrent unidirectional streams that a peer can open in a WebTransport session." json:"maxIncomingUniStreams,omitempty" toml:"maxIncomingUniStreams,omitempty" yaml:"maxIncomingUniStreams,omitempty" export:"true"`
+	MaxIncomingData       int64    `description:"Initial maximum number of bytes that a peer can send on the streams of a WebTransport session." json:"maxIncomingData,omitempty" toml:"maxIncomingData,omitempty" yaml:"maxIncomingData,omitempty" export:"true"`
+	ApplicationProtocols  []string `description:"Application protocols that can be negotiated with the clients." json:"applicationProtocols,omitempty" toml:"applicationProtocols,omitempty" yaml:"applicationProtocols,omitempty" export:"true"`
+}
+
+// SetDefaults sets the default values.
+func (c *WebTransportConfig) SetDefaults() {
+	c.MaxIncomingStreams = 100
+	c.MaxIncomingUniStreams = 100
+	c.MaxIncomingData = 16 << 20
 }
 
 // Redirections is a set of redirection for an entry point.

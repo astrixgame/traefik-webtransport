@@ -119,6 +119,11 @@ additionalArguments:
 | <a id="opt-http2-maxEncoderHeaderTableSize" href="#opt-http2-maxEncoderHeaderTableSize" title="#opt-http2-maxEncoderHeaderTableSize">`http2.`<br />`maxEncoderHeaderTableSize`</a> | Set the maximum size of the encoder header compression table. This controls the maximum size of the header cache that the server is willing to maintain when sending headers to the client, allowing the server to reduce the amount of duplicate headers it is sending in responses. <br /> This value is only a maximum, the other end of the connection can use a lower size.                                                                                                                                                                                                                                                                                                    | 4096                                                               | No       |
 | <a id="opt-http3" href="#opt-http3" title="#opt-http3">`http3`</a> | Enable HTTP/3 protocol on the `entryPoint`. <br /> HTTP/3 requires a TCP `entryPoint`. as HTTP/3 always starts as a TCP connection that then gets upgraded to UDP. In most scenarios, this `entryPoint` is the same as the one used for TLS traffic.<br /> More information [here](#http3).                                                                                                                                                                                                                                                                                                                                                                                         | -                                                                  | No       |
 | <a id="opt-http3-advertisedPort" href="#opt-http3-advertisedPort" title="#opt-http3-advertisedPort">`http3.advertisedPort`</a> | Set the UDP port to advertise as the HTTP/3 authority. <br /> It defaults to the entryPoint's address port. <br /> It can be used to override the authority in the `alt-svc` header, for example if the public facing port is different from where Traefik is listening.                                                                                                                                                                                                                                                                                                                                                                                                            | -                                                                  | No       |
+| <a id="opt-http3-webTransport" href="#opt-http3-webTransport" title="#opt-http3-webTransport">`http3.webTransport`</a> | Enable [WebTransport](#webtransport) sessions on the HTTP/3 `entryPoint`. <br /> The sessions are proxied to the `https` servers of the services, over HTTP/3. | - | No |
+| <a id="opt-http3-webTransport-maxIncomingStreams" href="#opt-http3-webTransport-maxIncomingStreams" title="#opt-http3-webTransport-maxIncomingStreams">`http3.webTransport.`<br />`maxIncomingStreams`</a> | Maximum number of concurrent bidirectional streams that a peer can open in a session. | 100 | No |
+| <a id="opt-http3-webTransport-maxIncomingUniStreams" href="#opt-http3-webTransport-maxIncomingUniStreams" title="#opt-http3-webTransport-maxIncomingUniStreams">`http3.webTransport.`<br />`maxIncomingUniStreams`</a> | Maximum number of concurrent unidirectional streams that a peer can open in a session. | 100 | No |
+| <a id="opt-http3-webTransport-maxIncomingData" href="#opt-http3-webTransport-maxIncomingData" title="#opt-http3-webTransport-maxIncomingData">`http3.webTransport.`<br />`maxIncomingData`</a> | Initial maximum number of bytes that a peer can send on the streams of a session. | 16777216 | No |
+| <a id="opt-http3-webTransport-applicationProtocols" href="#opt-http3-webTransport-applicationProtocols" title="#opt-http3-webTransport-applicationProtocols">`http3.webTransport.`<br />`applicationProtocols`</a> | Application protocols (`WT-Available-Protocols`) that can be negotiated with the clients. <br /> The protocol is selected by the backend server among the ones offered by the client, and is only relayed when it is in this list. | - | No |
 | <a id="opt-observability-accessLogs" href="#opt-observability-accessLogs" title="#opt-observability-accessLogs">`observability.`<br />`accessLogs`</a> | Defines whether a router attached to this EntryPoint produces access-logs by default. Nonetheless, a router defining its own observability configuration will opt-out from this default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | true                                                               | No       |
 | <a id="opt-observability-metrics" href="#opt-observability-metrics" title="#opt-observability-metrics">`observability.`<br />`metrics`</a> | Defines whether a router attached to this EntryPoint produces metrics by default. Nonetheless, a router defining its own observability configuration will opt-out from this default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | true                                                               | No       |
 | <a id="opt-observability-tracing" href="#opt-observability-tracing" title="#opt-observability-tracing">`observability.`<br />`tracing`</a> | Defines whether a router attached to this EntryPoint produces traces by default. Nonetheless, a router defining its own observability configuration will opt-out from this default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | true                                                               | No       |
@@ -509,6 +514,30 @@ automatically listens on UDP port N too. As a consequence,
 it means port N cannot be used by another UDP `entryPoint`.
 Since HTTP/3 requires the use of TLS,
 only routers with TLS enabled will be usable with HTTP/3.
+
+### WebTransport
+
+When `http3.webTransport` is enabled, the HTTP/3 server of the `entryPoint` accepts the WebTransport sessions
+(extended `CONNECT` requests), and the QUIC datagrams.
+The sessions go through the usual routing: the router rule and the middlewares apply to the `CONNECT` request,
+and the load-balancer picks the server of the service.
+Then Traefik opens a WebTransport session to this server, which must use the `https` scheme and speak HTTP/3 with WebTransport,
+and relays the bidirectional streams, the unidirectional streams, the datagrams, the stream resets, and the session termination
+(code and message) in both directions.
+
+The `Origin` header is forwarded to the backend server, which is responsible for checking it.
+Non-WebTransport `CONNECT` requests are still rejected.
+
+```yaml tab="File (YAML)"
+entryPoints:
+  websecure:
+    address: ":443"
+    http3:
+      webTransport:
+        maxIncomingStreams: 100
+        applicationProtocols:
+          - my-protocol
+```
 
 ### ProxyProtocol and Load-Balancers
 

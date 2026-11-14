@@ -21,6 +21,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/docker/cli v29.8.1+incompatible
 	github.com/docker/go-connections v0.8.1
+	github.com/dunglas/httpsfv v1.1.1
 	github.com/fatih/structs v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-acme/lego/v5 v5.6.0
@@ -58,6 +59,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/quic-go/quic-go v0.65.0
+	github.com/quic-go/webtransport-go v0.13.1-0.20261109070945-2a2b547d91a8
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/slog-zerolog/v2 v2.9.2
@@ -423,3 +425,5 @@ replace (
 // ambiguous import: found package github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/http in multiple modules
 // tencentcloud uses monorepo with multimodule but the go.mod files are incomplete.
 exclude github.com/tencentcloud/tencentcloud-sdk-go v3.0.83+incompatible
+
+replace github.com/quic-go/webtransport-go => ./third_party/webtransport-go

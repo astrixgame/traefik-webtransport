@@ -18,6 +18,7 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/go-acme/lego/v5/challenge"
 	gokitmetrics "github.com/go-kit/kit/metrics"
+	"github.com/quic-go/webtransport-go"
 	"github.com/rs/zerolog/log"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
@@ -41,6 +42,7 @@ import (
 	"github.com/traefik/traefik/v3/pkg/provider/traefik"
 	"github.com/traefik/traefik/v3/pkg/proxy"
 	"github.com/traefik/traefik/v3/pkg/proxy/httputil"
+	"github.com/traefik/traefik/v3/pkg/proxy/wtproxy"
 	"github.com/traefik/traefik/v3/pkg/redactor"
 	"github.com/traefik/traefik/v3/pkg/safe"
 	"github.com/traefik/traefik/v3/pkg/server"
@@ -306,6 +308,17 @@ func setupServer(staticConfiguration *static.Configuration) (*server.Server, err
 	var proxyBuilder service.ProxyBuilder = httputil.NewProxyBuilder(transportManager, semConvMetricRegistry)
 	if staticConfiguration.Experimental != nil && staticConfiguration.Experimental.FastProxy != nil {
 		proxyBuilder = proxy.NewSmartBuilder(transportManager, proxyBuilder, *staticConfiguration.Experimental.FastProxy)
+	}
+
+	if hasWebTransportEntryPoint(staticConfiguration) {
+		wtConfig := &static.WebTransportConfig{}
+		wtConfig.SetDefaults()
+
+		proxyBuilder = wtproxy.NewBuilder(proxyBuilder, transportManager, &webtransport.Config{
+			MaxIncomingStreams:    wtConfig.MaxIncomingStreams,
+			MaxIncomingUniStreams: wtConfig.MaxIncomingUniStreams,
+			MaxIncomingData:       wtConfig.MaxIncomingData,
+		})
 	}
 
 	dialerManager := tcp.NewDialerManager(spiffeX509Source)
@@ -677,4 +690,14 @@ func collect(staticConfiguration *static.Configuration) {
 			}
 		}
 	})
+}
+
+func hasWebTransportEntryPoint(staticConfiguration *static.Configuration) bool {
+	for _, ep := range staticConfiguration.EntryPoints {
+		if ep.HTTP3 != nil && ep.HTTP3.WebTransport != nil {
+			return true
+		}
+	}
+
+	return false
 }

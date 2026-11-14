@@ -106,6 +106,13 @@ entryPoints:
       maxConcurrentStreams: 42
     http3:
       advertisedPort: 42
+      webTransport:
+        maxIncomingStreams: 42
+        maxIncomingUniStreams: 42
+        maxIncomingData: 42
+        applicationProtocols:
+          - foobar
+          - foobar
     udp:
       timeout: 42s
     observability:

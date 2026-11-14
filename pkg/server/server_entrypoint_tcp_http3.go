@@ -12,10 +12,12 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/webtransport-go"
 	"github.com/rs/zerolog/log"
 	"github.com/traefik/traefik/v3/pkg/config/static"
 	tcpmuxer "github.com/traefik/traefik/v3/pkg/muxer/tcp"
 	"github.com/traefik/traefik/v3/pkg/proxy/fast"
+	"github.com/traefik/traefik/v3/pkg/proxy/wtproxy"
 	tcprouter "github.com/traefik/traefik/v3/pkg/server/router/tcp"
 	"github.com/traefik/traefik/v3/pkg/server/service/kerberos"
 	"github.com/traefik/traefik/v3/pkg/tcp"
@@ -25,6 +27,9 @@ type http3server struct {
 	*http3.Server
 
 	http3conn net.PacketConn
+
+	// webTransport is only set when WebTransport is enabled on the entry point, and wraps the HTTP/3 server.
+	webTransport *webtransport.Server
 
 	lock   sync.RWMutex
 	getter func(data tcpmuxer.ConnData) (*tls.Config, string, error)
@@ -70,6 +75,10 @@ func newHTTP3Server(ctx context.Context, name string, config *static.EntryPoint,
 		handler = withReadTimeout(ctx, handler, readTimeout)
 	}
 
+	if config.HTTP3.WebTransport != nil {
+		handler = withWebTransportServer(handler, func() *webtransport.Server { return h3.webTransport })
+	}
+
 	h3.Server = &http3.Server{
 		Addr:           config.GetAddress(),
 		Port:           config.HTTP3.AdvertisedPort,
@@ -103,6 +112,20 @@ func newHTTP3Server(ctx context.Context, name string, config *static.EntryPoint,
 		},
 	}
 
+	if wtConfig := config.HTTP3.WebTransport; wtConfig != nil {
+		h3.webTransport = &webtransport.Server{
+			H3: h3.Server,
+			Config: &webtransport.Config{
+				MaxIncomingStreams:    wtConfig.MaxIncomingStreams,
+				MaxIncomingUniStreams: wtConfig.MaxIncomingUniStreams,
+				MaxIncomingData:       wtConfig.MaxIncomingData,
+			},
+			ApplicationProtocols: wtConfig.ApplicationProtocols,
+			// The Origin header is forwarded to the backend servers, which are the ones knowing the allowed origins.
+			CheckOrigin: func(*http.Request) bool { return true },
+		}
+	}
+
 	previousHandler := httpsServer.Server.(*http.Server).Handler
 
 	httpsServer.Server.(*http.Server).Handler = http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -114,6 +137,16 @@ func newHTTP3Server(ctx context.Context, name string, config *static.EntryPoint,
 	})
 
 	return h3, nil
+}
+
+// withWebTransportServer makes the WebTransport server available to the proxy handlers serving the WebTransport sessions.
+func withWebTransportServer(next http.Handler, server func() *webtransport.Server) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if wtproxy.IsWebTransportRequest(req) {
+			req = req.WithContext(wtproxy.WithServer(req.Context(), server()))
+		}
+		next.ServeHTTP(rw, req)
+	})
 }
 
 func withReadTimeout(ctx context.Context, next http.Handler, timeout time.Duration) http.Handler {
@@ -133,6 +166,10 @@ func withReadTimeout(ctx context.Context, next http.Handler, timeout time.Durati
 }
 
 func (e *http3server) Start() error {
+	if e.webTransport != nil {
+		return e.webTransport.Serve(e.http3conn)
+	}
+
 	return e.Serve(e.http3conn)
 }
 
@@ -145,6 +182,10 @@ func (e *http3server) Switch(rt *tcprouter.Router) {
 
 func (e *http3server) Shutdown(_ context.Context) error {
 	// TODO: use e.Server.CloseGracefully() when available.
+	if e.webTransport != nil {
+		return e.webTransport.Close()
+	}
+
 	return e.Server.Close()
 }
 

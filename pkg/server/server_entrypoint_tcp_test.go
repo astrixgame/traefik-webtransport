@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/webtransport-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,7 @@ import (
 	"github.com/traefik/traefik/v3/pkg/config/static"
 	"github.com/traefik/traefik/v3/pkg/middlewares/requestdecorator"
 	"github.com/traefik/traefik/v3/pkg/proxy/fast"
+	"github.com/traefik/traefik/v3/pkg/proxy/wtproxy"
 	tcprouter "github.com/traefik/traefik/v3/pkg/server/router/tcp"
 	"github.com/traefik/traefik/v3/pkg/server/service"
 	"github.com/traefik/traefik/v3/pkg/tcp"
@@ -1859,4 +1861,26 @@ func TestStickyBackendTransportReleasedWithClientConnection(t *testing.T) {
 			assert.Eventually(t, func() bool { return backendConns.Load() == 0 }, 5*time.Second, 10*time.Millisecond)
 		})
 	}
+}
+
+func Test_denyConnect_webTransport(t *testing.T) {
+	handler := denyConnect(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	newRequest := func(ctx context.Context) *http.Request {
+		req := httptest.NewRequest(http.MethodConnect, "https://example.com/wt", nil).WithContext(ctx)
+		req.Proto = "webtransport"
+
+		return req
+	}
+
+	// Without a WebTransport server in the context, the request does not come from the HTTP/3 server of an entry point.
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, newRequest(t.Context()))
+	assert.Equal(t, http.StatusNotImplemented, res.Code)
+
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, newRequest(wtproxy.WithServer(t.Context(), &webtransport.Server{})))
+	assert.Equal(t, http.StatusOK, res.Code)
 }
